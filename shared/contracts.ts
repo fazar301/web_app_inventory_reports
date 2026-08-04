@@ -134,12 +134,14 @@ export type InventorySummaryDTO = {
   outOfStockCount: number
 }
 
-export type TransactionReportDTO = {
+export type InventoryReportDTO = {
   productId: string
   productName: string
-  totalIn: number
-  totalOut: number
-  netChange: number
+  categoryName: string
+  stock: number
+  unit: string
+  lastUpdated: string
+  threshold: number
 }
 
 export type TopProductDTO = {

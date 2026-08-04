@@ -30,7 +30,7 @@ export interface TransactionRepo {
   listByProduct(productId: string): Promise<TransactionWithProduct[]>
   listWithProduct(options?: TransactionListOptions): Promise<TransactionWithProduct[]>
   getCurrentStock(productId: string): Promise<number>
-  getStockMap(productIds?: string[]): Promise<Record<string, number>>
+  getStockMap(productIds?: string[], startDate?: Date, endDate?: Date): Promise<Record<string, number>>
 }
 
 const toTransaction = (raw: any): Transaction => ({
@@ -130,8 +130,15 @@ export const createPrismaTransactionRepo = (db: PrismaClient): TransactionRepo =
     return stock
   },
 
-  async getStockMap(productIds) {
-    const where = productIds ? { productId: { in: productIds } } : {}
+  async getStockMap(productIds, startDate, endDate) {
+    const where: any = {}
+    if (productIds) where.productId = { in: productIds }
+    if (startDate || endDate) {
+      where.transactionDate = {}
+      if (startDate) where.transactionDate.gte = startDate
+      if (endDate) where.transactionDate.lte = endDate
+    }
+
     const transactions = await db.transaction.groupBy({
       by: ['productId', 'type'],
       where,

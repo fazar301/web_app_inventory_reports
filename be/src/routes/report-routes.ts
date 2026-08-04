@@ -20,6 +20,15 @@ const dateRangeSchema = z.object({
   endDate: z.string().optional(),
 })
 
+const inventoryQuerySchema = dateRangeSchema.extend({
+  categoryId: z.string().optional(),
+  search: z.string().optional(),
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  sortBy: z.enum(["name", "createdAt"]).optional(),
+  sortOrder: z.enum(["asc", "desc"]).optional(),
+})
+
 const detailedTransactionsSchema = dateRangeSchema.extend({
   productId: z.string().optional(),
   type: z.enum(["IN", "OUT"]).optional(),
@@ -41,16 +50,16 @@ reportRoutes.get("/summary", async (c) => {
 })
 
 /**
- * GET /api/reports/transactions
- * Laporan pergerakan stok per produk (aggregasi IN/OUT/net)
+ * GET /api/reports/inventory
+ * Daftar Inventaris: List produk lengkap dengan stok (bisa difilter tanggal)
  */
 reportRoutes.get(
-  "/transactions",
-  zValidator("query", dateRangeSchema),
+  "/inventory",
+  zValidator("query", inventoryQuerySchema),
   async (c) => {
     const query = c.req.valid("query")
-    const data = await reportService.getTransactionReport(query)
-    return c.json({ success: true, data })
+    const data = await reportService.getInventoryReport(query)
+    return c.json({ success: true, ...data })
   }
 )
 
