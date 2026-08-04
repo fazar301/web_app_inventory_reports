@@ -7,7 +7,7 @@ Aplikasi manajemen inventori dan laporan stok menggunakan arsitektur berlapis **
 ```
 inventory dan reports/
 ├── be/          # Backend: Hono + Bun + Prisma + MongoDB Atlas
-├── fe/          # Frontend: Next.js 16 + Tailwind CSS (temanmu)
+├── fe/          # Frontend: Next.js 16 + Tailwind CSS 
 └── shared/      # Kontrak tipe bersama (contracts.ts)
 ```
 
