@@ -23,9 +23,12 @@ const newTransactionSchema = z.object({
   notes: z.string().optional(),
 })
 
+const updateTransactionSchema = newTransactionSchema.partial()
+
 const listQuerySchema = z.object({
   productId: z.string().optional(),
   type: z.enum(["IN", "OUT"]).optional(),
+  search: z.string().optional(),
   startDate: z.string().datetime().optional(),
   endDate: z.string().datetime().optional(),
   page: z.coerce.number().int().min(1).optional(),
@@ -71,4 +74,21 @@ transactionRoutes.get("/product/:productId", async (c) => {
   const productId = c.req.param("productId")
   const result = await transactionService.getProductTransactions(productId)
   return c.json({ success: true, data: result })
+})
+
+transactionRoutes.put(
+  "/:id",
+  zValidator("json", updateTransactionSchema),
+  async (c) => {
+    const id = c.req.param("id")
+    const body = c.req.valid("json")
+    const result = await transactionService.updateTransaction(id, body)
+    return c.json({ success: true, data: result })
+  }
+)
+
+transactionRoutes.delete("/:id", async (c) => {
+  const id = c.req.param("id")
+  const result = await transactionService.deleteTransaction(id)
+  return c.json({ success: true, ...result })
 })

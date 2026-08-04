@@ -6,7 +6,7 @@ import { zValidator } from "@hono/zod-validator"
 import { z } from "zod"
 import { makeCategoryService } from "../service/category-service"
 import { createPrismaCategoryRepo } from "../repository/category-repo"
-import { authMiddleware } from "../middleware/auth"
+import { authMiddleware, adminOnly } from "../middleware/auth"
 import { db } from "../lib/db"
 
 const categoryService = makeCategoryService(createPrismaCategoryRepo(db))
@@ -39,7 +39,7 @@ categoryRoutes.get("/:id", async (c) => {
 /**
  * POST /api/categories
  */
-categoryRoutes.post("/", zValidator("json", categorySchema), async (c) => {
+categoryRoutes.post("/", adminOnly(), zValidator("json", categorySchema), async (c) => {
   const body = c.req.valid("json")
   const cat = await categoryService.createCategory(body)
   return c.json({ success: true, data: cat }, 201)
@@ -50,6 +50,7 @@ categoryRoutes.post("/", zValidator("json", categorySchema), async (c) => {
  */
 categoryRoutes.put(
   "/:id",
+  adminOnly(),
   zValidator("json", categorySchema.partial()),
   async (c) => {
     const id = c.req.param("id")
@@ -62,7 +63,7 @@ categoryRoutes.put(
 /**
  * DELETE /api/categories/:id
  */
-categoryRoutes.delete("/:id", async (c) => {
+categoryRoutes.delete("/:id", adminOnly(), async (c) => {
   const result = await categoryService.deleteCategory(c.req.param("id"))
   return c.json({ success: true, data: result })
 })

@@ -7,12 +7,14 @@ import { z } from "zod"
 import { makeReportService } from "../service/report-service"
 import { createPrismaProductRepo } from "../repository/product-repo"
 import { createPrismaTransactionRepo } from "../repository/transaction-repo"
+import { createPrismaCategoryRepo } from "../repository/category-repo"
 import { authMiddleware } from "../middleware/auth"
 import { db } from "../lib/db"
 
 const reportService = makeReportService(
   createPrismaProductRepo(db),
-  createPrismaTransactionRepo(db)
+  createPrismaTransactionRepo(db),
+  createPrismaCategoryRepo(db)
 )
 
 const dateRangeSchema = z.object({
@@ -24,7 +26,7 @@ const inventoryQuerySchema = dateRangeSchema.extend({
   categoryId: z.string().optional(),
   search: z.string().optional(),
   page: z.coerce.number().int().min(1).optional(),
-  limit: z.coerce.number().int().min(1).max(100).optional(),
+  limit: z.coerce.number().int().min(1).max(10000).optional(),
   sortBy: z.enum(["name", "createdAt"]).optional(),
   sortOrder: z.enum(["asc", "desc"]).optional(),
 })

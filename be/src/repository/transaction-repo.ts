@@ -8,6 +8,7 @@ export interface TransactionListOptions {
   type?: TransactionType
   startDate?: Date
   endDate?: Date
+  search?: string
   page?: number
   limit?: number
 }
@@ -31,6 +32,10 @@ export interface TransactionRepo {
   listWithProduct(options?: TransactionListOptions): Promise<TransactionWithProduct[]>
   getCurrentStock(productId: string): Promise<number>
   getStockMap(productIds?: string[], startDate?: Date, endDate?: Date): Promise<Record<string, number>>
+  getLastTransactionDateMap(productIds?: string[], startDate?: Date, endDate?: Date): Promise<Record<string, Date | null>>
+  findById(id: string): Promise<TransactionWithProduct | null>
+  update(id: string, input: Partial<NewTransactionInput>): Promise<TransactionWithProduct>
+  delete(id: string): Promise<void>
 }
 
 const toTransaction = (raw: any): Transaction => ({
@@ -57,7 +62,7 @@ export const createPrismaTransactionRepo = (db: PrismaClient): TransactionRepo =
   },
 
   async list(options = {}) {
-    const { productId, type, startDate, endDate, page = 1, limit = 20 } = options
+    const { productId, type, startDate, endDate, search, page = 1, limit = 10 } = options
 
     const where: any = {}
     if (productId) where.productId = productId
@@ -67,6 +72,13 @@ export const createPrismaTransactionRepo = (db: PrismaClient): TransactionRepo =
       if (startDate) where.transactionDate.gte = startDate
       if (endDate) where.transactionDate.lte = endDate
     }
+    
+    if (search) {
+      where.OR = [
+        { product: { name: { contains: search, mode: "insensitive" } } },
+        { notes: { contains: search, mode: "insensitive" } },
+      ]
+    }
 
     const skip = (page - 1) * limit
     const [raws, total] = await Promise.all([
@@ -74,7 +86,7 @@ export const createPrismaTransactionRepo = (db: PrismaClient): TransactionRepo =
         where,
         skip,
         take: limit,
-        orderBy: { transactionDate: "desc" },
+        orderBy: [{ transactionDate: "desc" }, { createdAt: "desc" }],
         include: { product: { select: { name: true } } },
       }),
       db.transaction.count({ where }),
@@ -92,7 +104,7 @@ export const createPrismaTransactionRepo = (db: PrismaClient): TransactionRepo =
   async listByProduct(productId) {
     const raws = await db.transaction.findMany({
       where: { productId },
-      orderBy: { transactionDate: "desc" },
+      orderBy: [{ transactionDate: "desc" }, { createdAt: "desc" }],
       include: { product: { select: { name: true } } },
     })
     return raws.map(toTransactionWithProduct)
@@ -109,7 +121,7 @@ export const createPrismaTransactionRepo = (db: PrismaClient): TransactionRepo =
 
     const raws = await db.transaction.findMany({
       where,
-      orderBy: { transactionDate: "desc" },
+      orderBy: [{ transactionDate: "desc" }, { createdAt: "desc" }],
       include: { product: { select: { name: true } } },
     })
     return raws.map(toTransactionWithProduct)
@@ -157,5 +169,48 @@ export const createPrismaTransactionRepo = (db: PrismaClient): TransactionRepo =
       if (t.type === "OUT") stockMap[t.productId] -= qty
     }
     return stockMap
+  },
+
+  async getLastTransactionDateMap(productIds, startDate, endDate) {
+    const where: any = {}
+    if (productIds) where.productId = { in: productIds }
+    if (startDate || endDate) {
+      where.transactionDate = {}
+      if (startDate) where.transactionDate.gte = startDate
+      if (endDate) where.transactionDate.lte = endDate
+    }
+
+    const transactions = await db.transaction.groupBy({
+      by: ['productId'],
+      where,
+      _max: { transactionDate: true },
+    })
+
+    const dateMap: Record<string, Date | null> = {}
+    for (const t of transactions) {
+      dateMap[t.productId] = t._max.transactionDate
+    }
+    return dateMap
+  },
+
+  async findById(id) {
+    const raw = await db.transaction.findUnique({
+      where: { id },
+      include: { product: { select: { name: true } } },
+    })
+    return raw ? toTransactionWithProduct(raw) : null
+  },
+
+  async update(id, input) {
+    const raw = await db.transaction.update({
+      where: { id },
+      data: input as any,
+      include: { product: { select: { name: true } } },
+    })
+    return toTransactionWithProduct(raw)
+  },
+
+  async delete(id) {
+    await db.transaction.delete({ where: { id } })
   },
 })

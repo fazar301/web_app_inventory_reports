@@ -9,7 +9,6 @@ import type {
   UpdateProductInput,
 } from "../domain/product"
 
-// ─── Interface Kecil & Spesifik (ISP) ────────────────────────────────────────
 
 export interface ProductListOptions {
   categoryId?: string
@@ -72,7 +71,7 @@ export const createPrismaProductRepo = (db: PrismaClient): ProductRepo => ({
       categoryId,
       search,
       page = 1,
-      limit = 20,
+      limit = 10,
       sortBy = "createdAt",
       sortOrder = "desc",
     } = options

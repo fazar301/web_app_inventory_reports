@@ -10,6 +10,7 @@ export type Product = {
   description: string | null
   categoryId: string
   categoryName?: string
+  stock?: number
   threshold: number
   unit: string
   imageUrl: string | null
