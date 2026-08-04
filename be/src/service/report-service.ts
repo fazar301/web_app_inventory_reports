@@ -24,12 +24,40 @@ export const makeReportService = (
     return calculateInventorySummary(products, stockMap)
   },
 
-  async getTransactionReport(range: ReportDateRange = {}) {
-    const startDate = range.startDate ? new Date(range.startDate) : undefined
-    const endDate = range.endDate ? new Date(range.endDate) : undefined
+  async getInventoryReport(
+    options: ReportDateRange & {
+      categoryId?: string
+      search?: string
+      page?: number
+      limit?: number
+      sortBy?: "name" | "createdAt"
+      sortOrder?: "asc" | "desc"
+    } = {}
+  ) {
+    const { startDate, endDate, ...productOptions } = options
+    const productsResult = await productRepo.list(productOptions)
 
-    const transactions = await transactionRepo.listWithProduct({ startDate, endDate })
-    return aggregateTransactionsByProduct(transactions)
+    const start = startDate ? new Date(startDate) : undefined
+    const end = endDate ? new Date(endDate) : undefined
+
+    const stockMap = await transactionRepo.getStockMap(
+      productsResult.data.map((p) => p.id),
+      start,
+      end
+    )
+
+    return {
+      ...productsResult,
+      data: productsResult.data.map((p) => ({
+        productId: p.id,
+        productName: p.name,
+        categoryName: p.categoryName || "-",
+        stock: stockMap[p.id] || 0,
+        unit: p.unit,
+        lastUpdated: p.updatedAt,
+        threshold: p.threshold,
+      })),
+    }
   },
 
   async getLowStockProducts() {
