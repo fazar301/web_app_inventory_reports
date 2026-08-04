@@ -14,10 +14,9 @@ import type {
 export interface ProductListOptions {
   categoryId?: string
   search?: string
-  lowStock?: boolean
   page?: number
   limit?: number
-  sortBy?: "name" | "price" | "quantity" | "createdAt"
+  sortBy?: "name" | "createdAt"
   sortOrder?: "asc" | "desc"
 }
 
@@ -31,7 +30,6 @@ export interface ProductListResult {
 
 export interface ProductReader {
   findById(id: string): Promise<Product | null>
-  findBySku(sku: string): Promise<Product | null>
   list(options?: ProductListOptions): Promise<ProductListResult>
   findAll(): Promise<Product[]>
 }
@@ -39,21 +37,19 @@ export interface ProductReader {
 export interface ProductWriter {
   create(input: NewProductInput): Promise<Product>
   update(id: string, input: UpdateProductInput): Promise<Product>
-  updateQuantity(id: string, quantity: number): Promise<Product>
   delete(id: string): Promise<void>
 }
 
-// Gabungan interface untuk dipakai service (DIP: service bergantung ini, bukan Prisma)
 export type ProductRepo = ProductReader & ProductWriter
 
 // ─── Implementasi Prisma (Concrete) ──────────────────────────────────────────
 
-const toProduct = (raw: any, stock: number): Product => ({
+const toProduct = (raw: any): Product => ({
   id: raw.id,
   name: raw.name,
   description: raw.description ?? null,
   categoryId: raw.categoryId,
-  stock,
+  categoryName: raw.category?.name,
   threshold: raw.threshold,
   unit: raw.unit,
   imageUrl: raw.imageUrl ?? null,
@@ -61,51 +57,20 @@ const toProduct = (raw: any, stock: number): Product => ({
   updatedAt: raw.updatedAt.toISOString(),
 })
 
-// Helper to calculate stock for a list of products
-const calculateStocks = async (db: PrismaClient, productIds: string[]) => {
-  if (productIds.length === 0) return {}
-  const transactions = await db.transaction.groupBy({
-    by: ['productId', 'type'],
-    where: { productId: { in: productIds } },
-    _sum: { quantity: true },
-  })
-
-  const stockMap: Record<string, number> = {}
-  for (const id of productIds) {
-    stockMap[id] = 0
-  }
-
-  for (const t of transactions) {
-    const qty = t._sum.quantity || 0
-    if (t.type === "IN") {
-      stockMap[t.productId] += qty
-    } else {
-      stockMap[t.productId] -= qty
-    }
-  }
-  return stockMap
-}
-
 export const createPrismaProductRepo = (db: PrismaClient): ProductRepo => ({
   async findById(id) {
-    const raw = await db.product.findUnique({ where: { id } })
+    const raw = await db.product.findUnique({
+      where: { id },
+      include: { category: true }
+    })
     if (!raw) return null
-    const stocks = await calculateStocks(db, [id])
-    return toProduct(raw, stocks[id])
-  },
-
-  async findBySku(sku) {
-    // Sku is removed, so we'll just return null or we can remove this method entirely.
-    // To satisfy the interface without breaking other files right away, I'll return null.
-    // Actually, I should remove it from the interface. I'll just return null for now.
-    return null
+    return toProduct(raw)
   },
 
   async list(options = {}) {
     const {
       categoryId,
       search,
-      lowStock,
       page = 1,
       limit = 20,
       sortBy = "createdAt",
@@ -127,20 +92,14 @@ export const createPrismaProductRepo = (db: PrismaClient): ProductRepo => ({
         where,
         skip,
         take: limit,
-        orderBy: { [sortBy === "quantity" ? "createdAt" : sortBy]: sortOrder },
+        orderBy: { [sortBy]: sortOrder },
+        include: { category: true }
       }),
       db.product.count({ where }),
     ])
 
-    const stocks = await calculateStocks(db, raws.map((r: any) => r.id))
-    let data = raws.map((r: any) => toProduct(r, stocks[r.id]))
-
-    if (lowStock) {
-      data = data.filter((p) => p.stock <= p.threshold)
-    }
-
     return {
-      data,
+      data: raws.map(toProduct),
       total,
       page,
       limit,
@@ -149,27 +108,28 @@ export const createPrismaProductRepo = (db: PrismaClient): ProductRepo => ({
   },
 
   async findAll() {
-    const raws = await db.product.findMany({ orderBy: { name: "asc" } })
-    const stocks = await calculateStocks(db, raws.map((r: any) => r.id))
-    return raws.map((r: any) => toProduct(r, stocks[r.id]))
+    const raws = await db.product.findMany({
+      orderBy: { name: "asc" },
+      include: { category: true }
+    })
+    return raws.map(toProduct)
   },
 
   async create(input) {
-    const raw = await db.product.create({ data: input as any })
-    return toProduct(raw, 0)
+    const raw = await db.product.create({
+      data: input as any,
+      include: { category: true }
+    })
+    return toProduct(raw)
   },
 
   async update(id, input) {
-    const raw = await db.product.update({ where: { id }, data: input as any })
-    const stocks = await calculateStocks(db, [id])
-    return toProduct(raw, stocks[id])
-  },
-
-  async updateQuantity(id, quantity) {
-    // Deprecated: Transactions now handle quantity. We just return the product.
-    const raw = await db.product.findUnique({ where: { id } })
-    const stocks = await calculateStocks(db, [id])
-    return toProduct(raw, stocks[id])
+    const raw = await db.product.update({
+      where: { id },
+      data: input as any,
+      include: { category: true }
+    })
+    return toProduct(raw)
   },
 
   async delete(id) {

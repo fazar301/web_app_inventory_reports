@@ -32,7 +32,6 @@ const updateProductSchema = newProductSchema.partial()
 const listQuerySchema = z.object({
   categoryId: z.string().optional(),
   search: z.string().optional(),
-  lowStock: z.coerce.boolean().optional(),
   page: z.coerce.number().int().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
   sortBy: z.enum(["name", "createdAt"]).optional(),

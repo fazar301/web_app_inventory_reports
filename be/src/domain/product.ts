@@ -9,7 +9,7 @@ export type Product = {
   name: string
   description: string | null
   categoryId: string
-  stock: number // Dinamis dihitung dari transaksi
+  categoryName?: string
   threshold: number
   unit: string
   imageUrl: string | null
