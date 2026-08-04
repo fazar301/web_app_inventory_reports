@@ -26,14 +26,16 @@ export type TopProduct = {
 }
 
 export const calculateInventorySummary = (
-  products: Product[]
+  products: Product[],
+  stockMap: Record<string, number>
 ): InventorySummary => ({
   totalProducts: products.length,
-  totalItems: products.reduce((sum, p) => sum + p.stock, 0),
-  lowStockCount: products.filter(
-    (p) => p.stock > 0 && p.stock <= p.threshold
-  ).length,
-  outOfStockCount: products.filter((p) => p.stock === 0).length,
+  totalItems: products.reduce((sum, p) => sum + (stockMap[p.id] || 0), 0),
+  lowStockCount: products.filter((p) => {
+    const stock = stockMap[p.id] || 0
+    return stock > 0 && stock <= p.threshold
+  }).length,
+  outOfStockCount: products.filter((p) => (stockMap[p.id] || 0) === 0).length,
 })
 
 export const aggregateTransactionsByProduct = (
@@ -69,20 +71,28 @@ export const aggregateTransactionsByProduct = (
 export const getTopOutProducts = (
   reports: TransactionReport[],
   products: Product[],
+  stockMap: Record<string, number>,
   limit: number = 10
 ): TopProduct[] => {
-  const productMap = new Map(products.map((p) => [p.id, p]))
-
   return reports
     .sort((a, b) => b.totalOut - a.totalOut)
     .slice(0, limit)
-    .map((r) => ({
-      productId: r.productId,
-      productName: r.productName,
-      totalOut: r.totalOut,
-      currentStock: productMap.get(r.productId)?.stock ?? 0,
-    }))
+    .map((report) => {
+      const product = products.find((p) => p.id === report.productId)
+      return {
+        productId: report.productId,
+        productName: report.productName,
+        totalOut: report.totalOut,
+        currentStock: stockMap[report.productId] || 0,
+      }
+    })
 }
 
-export const filterLowStockProducts = (products: Product[]): Product[] =>
-  products.filter((p) => p.stock <= p.threshold)
+export const filterLowStockProducts = (
+  products: Product[],
+  stockMap: Record<string, number>
+): (Product & { stock: number })[] => {
+  return products
+    .map((p) => ({ ...p, stock: stockMap[p.id] || 0 }))
+    .filter((p) => p.stock <= p.threshold)
+}

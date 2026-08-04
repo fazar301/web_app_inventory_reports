@@ -29,6 +29,8 @@ export interface TransactionRepo {
   list(options?: TransactionListOptions): Promise<TransactionListResult>
   listByProduct(productId: string): Promise<TransactionWithProduct[]>
   listWithProduct(options?: TransactionListOptions): Promise<TransactionWithProduct[]>
+  getCurrentStock(productId: string): Promise<number>
+  getStockMap(productIds?: string[]): Promise<Record<string, number>>
 }
 
 const toTransaction = (raw: any): Transaction => ({
@@ -111,5 +113,42 @@ export const createPrismaTransactionRepo = (db: PrismaClient): TransactionRepo =
       include: { product: { select: { name: true } } },
     })
     return raws.map(toTransactionWithProduct)
+  },
+
+  async getCurrentStock(productId) {
+    const transactions = await db.transaction.groupBy({
+      by: ['type'],
+      where: { productId },
+      _sum: { quantity: true },
+    })
+
+    let stock = 0
+    for (const t of transactions) {
+      if (t.type === "IN") stock += (t._sum.quantity || 0)
+      if (t.type === "OUT") stock -= (t._sum.quantity || 0)
+    }
+    return stock
+  },
+
+  async getStockMap(productIds) {
+    const where = productIds ? { productId: { in: productIds } } : {}
+    const transactions = await db.transaction.groupBy({
+      by: ['productId', 'type'],
+      where,
+      _sum: { quantity: true },
+    })
+
+    const stockMap: Record<string, number> = {}
+    if (productIds) {
+      for (const id of productIds) stockMap[id] = 0
+    }
+
+    for (const t of transactions) {
+      const qty = t._sum.quantity || 0
+      if (!stockMap[t.productId]) stockMap[t.productId] = 0
+      if (t.type === "IN") stockMap[t.productId] += qty
+      if (t.type === "OUT") stockMap[t.productId] -= qty
+    }
+    return stockMap
   },
 })

@@ -52,15 +52,15 @@ export type UpdateCategoryRequest = Partial<CreateCategoryRequest>
 
 // ─── Product ──────────────────────────────────────────────────────────────────
 
-export type ProductDTO = {
+export interface ProductDTO {
   id: string
   name: string
-  description: string | null
+  description?: string
   categoryId: string
-  stock: number // Dinamis dari SUM(IN) - SUM(OUT)
+  categoryName?: string
   threshold: number
   unit: string
-  imageUrl: string | null
+  imageUrl?: string
   createdAt: string
   updatedAt: string
 }
@@ -79,10 +79,9 @@ export type UpdateProductRequest = Partial<CreateProductRequest>
 export type ProductListQuery = {
   categoryId?: string
   search?: string
-  lowStock?: boolean
   page?: number
   limit?: number
-  sortBy?: "name" | "price" | "quantity" | "createdAt"
+  sortBy?: "name" | "createdAt"
   sortOrder?: "asc" | "desc"
 }
 

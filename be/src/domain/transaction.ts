@@ -21,6 +21,7 @@ export type NewTransactionInput = {
   amount: number
   transactionDate: string
   notes?: string
+  createdBy?: string
 }
 
 export const isValidQuantity = (qty: number): boolean => qty > 0 && Number.isInteger(qty)

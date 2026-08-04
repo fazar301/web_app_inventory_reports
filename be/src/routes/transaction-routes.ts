@@ -32,7 +32,12 @@ const listQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
 })
 
-export const transactionRoutes = new Hono()
+type AuthVariables = {
+  userId: string
+  userRole: string
+}
+
+export const transactionRoutes = new Hono<{ Variables: AuthVariables }>()
 
 transactionRoutes.use("*", authMiddleware())
 
@@ -41,11 +46,11 @@ transactionRoutes.post(
   zValidator("json", newTransactionSchema),
   async (c) => {
     const body = c.req.valid("json")
-    const user = c.get("user") // From auth middleware
+    const userId = c.get("userId")
 
     const result = await transactionService.recordTransaction({
       ...body,
-      // Pass createdBy from JWT user logic here if supported
+      createdBy: userId,
     })
 
     return c.json({ success: true, data: result }, 201)
@@ -53,8 +58,12 @@ transactionRoutes.post(
 )
 
 transactionRoutes.get("/", zValidator("query", listQuerySchema), async (c) => {
-  const query = c.req.valid("query")
-  const result = await transactionService.listTransactions(query)
+  const { startDate, endDate, ...rest } = c.req.valid("query")
+  const result = await transactionService.listTransactions({
+    ...rest,
+    startDate: startDate ? new Date(startDate) : undefined,
+    endDate: endDate ? new Date(endDate) : undefined,
+  })
   return c.json({ success: true, ...result })
 })
 
