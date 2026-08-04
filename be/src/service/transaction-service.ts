@@ -23,23 +23,19 @@ export const makeTransactionService = (
     if (errors.length > 0) throw new ValidationError(errors)
 
     // 3. Cek stok (mencegah stok minus untuk OUT)
-    if (input.type === "OUT" && product.stock < input.quantity) {
+    const currentStock = await transactionRepo.getCurrentStock(input.productId)
+    if (input.type === "OUT" && currentStock < input.quantity) {
       throw new ValidationError([
-        `Stok tidak mencukupi (Sisa: ${product.stock}, Diminta: ${input.quantity})`,
+        `Stok tidak mencukupi (Sisa: ${currentStock}, Diminta: ${input.quantity})`,
       ])
     }
 
     // 4. Simpan transaksi
     const transaction = await transactionRepo.create(input)
 
-    // 5. Update stok produk secara dinamis untuk response
-    const newStock = input.type === "IN" 
-      ? product.stock + input.quantity 
-      : product.stock - input.quantity
-
     return {
       transaction,
-      product: { ...product, stock: newStock },
+      product,
     }
   },
 
