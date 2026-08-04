@@ -13,7 +13,7 @@ datasource db {
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-enum MovementType {
+enum TransactionType {
   IN
   OUT
 }
@@ -49,34 +49,32 @@ model Category {
 }
 
 model Product {
-  id          String          @id @default(auto()) @map("_id") @db.ObjectId
-  sku         String          @unique
+  id          String        @id @default(auto()) @map("_id") @db.ObjectId
   name        String
   description String?
-  categoryId  String          @db.ObjectId
-  price       Float
-  quantity    Int             @default(0)
-  threshold   Int             @default(10)
-  unit        String          @default("pcs")
+  categoryId  String        @db.ObjectId
+  threshold   Int           @default(10)
+  unit        String        @default("pcs")
   imageUrl    String?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  category    Category        @relation(fields: [categoryId], references: [id])
-  movements   StockMovement[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  category    Category      @relation(fields: [categoryId], references: [id])
+  transactions Transaction[]
 
   @@map("products")
 }
 
-model StockMovement {
-  id        String       @id @default(auto()) @map("_id") @db.ObjectId
-  productId String       @db.ObjectId
-  type      MovementType
-  quantity  Int
-  note      String?
-  reference String? // e.g. PO number, invoice number
-  createdBy String? // user ID who performed this
-  createdAt DateTime     @default(now())
-  product   Product      @relation(fields: [productId], references: [id])
+model Transaction {
+  id              String          @id @default(auto()) @map("_id") @db.ObjectId
+  productId       String          @db.ObjectId
+  type            TransactionType
+  quantity        Int
+  amount          Float           // Total harga
+  transactionDate DateTime
+  notes           String?
+  createdBy       String?         // user ID who performed this
+  createdAt       DateTime        @default(now())
+  product         Product         @relation(fields: [productId], references: [id])
 
-  @@map("stock_movements")
+  @@map("transactions")
 }

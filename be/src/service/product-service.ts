@@ -47,9 +47,7 @@ export const makeProductService = (
     const errors = validateNewProduct(normalized)
     if (errors.length > 0) throw new ValidationError(errors)
 
-    // 2. Cek SKU duplikat (efek samping di tepi)
-    const existing = await productRepo.findBySku(normalized.sku)
-    if (existing) throw new ConflictError(`SKU '${normalized.sku}' sudah digunakan`)
+    // 2. (SKU sudah dihapus, tidak perlu cek duplikat)
 
     // 3. Cek kategori valid (efek samping di tepi)
     const category = await categoryRepo.findById(normalized.categoryId)
@@ -72,10 +70,6 @@ export const makeProductService = (
       if (!category) throw new NotFoundError("Kategori", input.categoryId)
     }
 
-    // Validasi price jika diubah
-    if (input.price !== undefined && input.price < 0) {
-      throw new ValidationError(["Harga harus bernilai positif"])
-    }
 
     return productRepo.update(id, input)
   },
