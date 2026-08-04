@@ -6,13 +6,13 @@ import { zValidator } from "@hono/zod-validator"
 import { z } from "zod"
 import { makeReportService } from "../service/report-service"
 import { createPrismaProductRepo } from "../repository/product-repo"
-import { createPrismaStockMovementRepo } from "../repository/stock-movement-repo"
+import { createPrismaTransactionRepo } from "../repository/transaction-repo"
 import { authMiddleware } from "../middleware/auth"
 import { db } from "../lib/db"
 
 const reportService = makeReportService(
   createPrismaProductRepo(db),
-  createPrismaStockMovementRepo(db)
+  createPrismaTransactionRepo(db)
 )
 
 const dateRangeSchema = z.object({
@@ -20,7 +20,7 @@ const dateRangeSchema = z.object({
   endDate: z.string().optional(),
 })
 
-const detailedMovementsSchema = dateRangeSchema.extend({
+const detailedTransactionsSchema = dateRangeSchema.extend({
   productId: z.string().optional(),
   type: z.enum(["IN", "OUT"]).optional(),
   page: z.coerce.number().int().min(1).optional(),
@@ -33,7 +33,7 @@ reportRoutes.use("*", authMiddleware())
 
 /**
  * GET /api/reports/summary
- * Ringkasan inventori: total produk, item, nilai total, low stock count
+ * Ringkasan inventori: total produk, item, low stock count
  */
 reportRoutes.get("/summary", async (c) => {
   const summary = await reportService.getInventorySummary()
@@ -41,15 +41,15 @@ reportRoutes.get("/summary", async (c) => {
 })
 
 /**
- * GET /api/reports/stock-movements
+ * GET /api/reports/transactions
  * Laporan pergerakan stok per produk (aggregasi IN/OUT/net)
  */
 reportRoutes.get(
-  "/stock-movements",
+  "/transactions",
   zValidator("query", dateRangeSchema),
   async (c) => {
     const query = c.req.valid("query")
-    const data = await reportService.getStockMovementReport(query)
+    const data = await reportService.getTransactionReport(query)
     return c.json({ success: true, data })
   }
 )
@@ -80,15 +80,15 @@ reportRoutes.get(
 )
 
 /**
- * GET /api/reports/movements-detail
+ * GET /api/reports/transactions-detail
  * Detail pergerakan stok dengan filter & pagination
  */
 reportRoutes.get(
-  "/movements-detail",
-  zValidator("query", detailedMovementsSchema),
+  "/transactions-detail",
+  zValidator("query", detailedTransactionsSchema),
   async (c) => {
     const query = c.req.valid("query")
-    const result = await reportService.getDetailedMovements(query)
+    const result = await reportService.getDetailedTransactions(query)
     return c.json({ success: true, ...result })
   }
 )

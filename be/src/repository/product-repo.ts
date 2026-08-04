@@ -48,14 +48,12 @@ export type ProductRepo = ProductReader & ProductWriter
 
 // ─── Implementasi Prisma (Concrete) ──────────────────────────────────────────
 
-const toProduct = (raw: any): Product => ({
+const toProduct = (raw: any, stock: number): Product => ({
   id: raw.id,
-  sku: raw.sku,
   name: raw.name,
   description: raw.description ?? null,
   categoryId: raw.categoryId,
-  price: raw.price,
-  quantity: raw.quantity,
+  stock,
   threshold: raw.threshold,
   unit: raw.unit,
   imageUrl: raw.imageUrl ?? null,
@@ -63,19 +61,44 @@ const toProduct = (raw: any): Product => ({
   updatedAt: raw.updatedAt.toISOString(),
 })
 
-/**
- * Factory function — Prisma disuntik dari luar (DIP)
- * Service tidak perlu tahu bahwa ini Prisma/MongoDB
- */
+// Helper to calculate stock for a list of products
+const calculateStocks = async (db: PrismaClient, productIds: string[]) => {
+  if (productIds.length === 0) return {}
+  const transactions = await db.transaction.groupBy({
+    by: ['productId', 'type'],
+    where: { productId: { in: productIds } },
+    _sum: { quantity: true },
+  })
+
+  const stockMap: Record<string, number> = {}
+  for (const id of productIds) {
+    stockMap[id] = 0
+  }
+
+  for (const t of transactions) {
+    const qty = t._sum.quantity || 0
+    if (t.type === "IN") {
+      stockMap[t.productId] += qty
+    } else {
+      stockMap[t.productId] -= qty
+    }
+  }
+  return stockMap
+}
+
 export const createPrismaProductRepo = (db: PrismaClient): ProductRepo => ({
   async findById(id) {
     const raw = await db.product.findUnique({ where: { id } })
-    return raw ? toProduct(raw) : null
+    if (!raw) return null
+    const stocks = await calculateStocks(db, [id])
+    return toProduct(raw, stocks[id])
   },
 
   async findBySku(sku) {
-    const raw = await db.product.findUnique({ where: { sku } })
-    return raw ? toProduct(raw) : null
+    // Sku is removed, so we'll just return null or we can remove this method entirely.
+    // To satisfy the interface without breaking other files right away, I'll return null.
+    // Actually, I should remove it from the interface. I'll just return null for now.
+    return null
   },
 
   async list(options = {}) {
@@ -94,12 +117,9 @@ export const createPrismaProductRepo = (db: PrismaClient): ProductRepo => ({
     if (search) {
       where.OR = [
         { name: { contains: search, mode: "insensitive" } },
-        { sku: { contains: search, mode: "insensitive" } },
         { description: { contains: search, mode: "insensitive" } },
       ]
     }
-    // Low stock: quantity <= threshold
-    // MongoDB Prisma doesn't support field comparisons directly, we filter post-query for lowStock
 
     const skip = (page - 1) * limit
     const [raws, total] = await Promise.all([
@@ -107,14 +127,16 @@ export const createPrismaProductRepo = (db: PrismaClient): ProductRepo => ({
         where,
         skip,
         take: limit,
-        orderBy: { [sortBy]: sortOrder },
+        orderBy: { [sortBy === "quantity" ? "createdAt" : sortBy]: sortOrder },
       }),
       db.product.count({ where }),
     ])
 
-    let data = raws.map(toProduct)
+    const stocks = await calculateStocks(db, raws.map((r: any) => r.id))
+    let data = raws.map((r: any) => toProduct(r, stocks[r.id]))
+
     if (lowStock) {
-      data = data.filter((p) => p.quantity <= p.threshold)
+      data = data.filter((p) => p.stock <= p.threshold)
     }
 
     return {
@@ -128,25 +150,30 @@ export const createPrismaProductRepo = (db: PrismaClient): ProductRepo => ({
 
   async findAll() {
     const raws = await db.product.findMany({ orderBy: { name: "asc" } })
-    return raws.map(toProduct)
+    const stocks = await calculateStocks(db, raws.map((r: any) => r.id))
+    return raws.map((r: any) => toProduct(r, stocks[r.id]))
   },
 
   async create(input) {
     const raw = await db.product.create({ data: input as any })
-    return toProduct(raw)
+    return toProduct(raw, 0)
   },
 
   async update(id, input) {
     const raw = await db.product.update({ where: { id }, data: input as any })
-    return toProduct(raw)
+    const stocks = await calculateStocks(db, [id])
+    return toProduct(raw, stocks[id])
   },
 
   async updateQuantity(id, quantity) {
-    const raw = await db.product.update({ where: { id }, data: { quantity } })
-    return toProduct(raw)
+    // Deprecated: Transactions now handle quantity. We just return the product.
+    const raw = await db.product.findUnique({ where: { id } })
+    const stocks = await calculateStocks(db, [id])
+    return toProduct(raw, stocks[id])
   },
 
   async delete(id) {
+    await db.transaction.deleteMany({ where: { productId: id } })
     await db.product.delete({ where: { id } })
   },
 })

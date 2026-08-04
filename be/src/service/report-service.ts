@@ -1,12 +1,10 @@
 // be/src/service/report-service.ts
-// Service layer: logika untuk membuat laporan
-// Orkestrasi: ambil data dari repo → kalkulasi (pure domain functions)
 
 import type { ProductRepo } from "../repository/product-repo"
-import type { StockMovementRepo } from "../repository/stock-movement-repo"
+import type { TransactionRepo } from "../repository/transaction-repo"
 import {
   calculateInventorySummary,
-  aggregateMovementsByProduct,
+  aggregateTransactionsByProduct,
   getTopOutProducts,
   filterLowStockProducts,
 } from "../domain/report"
@@ -18,55 +16,40 @@ export interface ReportDateRange {
 
 export const makeReportService = (
   productRepo: ProductRepo,
-  movementRepo: StockMovementRepo
+  transactionRepo: TransactionRepo
 ) => ({
-  /**
-   * Ringkasan inventori: total produk, item, nilai, low stock, out of stock
-   */
   async getInventorySummary() {
     const products = await productRepo.findAll()
-    return calculateInventorySummary(products) // pure function
+    return calculateInventorySummary(products)
   },
 
-  /**
-   * Laporan pergerakan stok (aggregasi per produk) dalam rentang tanggal
-   */
-  async getStockMovementReport(range: ReportDateRange = {}) {
+  async getTransactionReport(range: ReportDateRange = {}) {
     const startDate = range.startDate ? new Date(range.startDate) : undefined
     const endDate = range.endDate ? new Date(range.endDate) : undefined
 
-    const movements = await movementRepo.listWithProduct({ startDate, endDate })
-    return aggregateMovementsByProduct(movements) // pure function
+    const transactions = await transactionRepo.listWithProduct({ startDate, endDate })
+    return aggregateTransactionsByProduct(transactions)
   },
 
-  /**
-   * Daftar produk dengan stok rendah (di bawah threshold)
-   */
   async getLowStockProducts() {
     const products = await productRepo.findAll()
-    return filterLowStockProducts(products) // pure function
+    return filterLowStockProducts(products)
   },
 
-  /**
-   * Top N produk paling sering keluar (terlaris)
-   */
   async getTopProducts(limit: number = 10, range: ReportDateRange = {}) {
     const startDate = range.startDate ? new Date(range.startDate) : undefined
     const endDate = range.endDate ? new Date(range.endDate) : undefined
 
-    const [movements, products] = await Promise.all([
-      movementRepo.listWithProduct({ startDate, endDate }),
+    const [transactions, products] = await Promise.all([
+      transactionRepo.listWithProduct({ startDate, endDate }),
       productRepo.findAll(),
     ])
 
-    const reports = aggregateMovementsByProduct(movements) // pure
-    return getTopOutProducts(reports, products, limit)      // pure
+    const reports = aggregateTransactionsByProduct(transactions)
+    return getTopOutProducts(reports, products, limit)
   },
 
-  /**
-   * Detail pergerakan stok (raw list) dengan pagination
-   */
-  async getDetailedMovements(
+  async getDetailedTransactions(
     options: ReportDateRange & {
       productId?: string
       type?: "IN" | "OUT"
@@ -75,7 +58,7 @@ export const makeReportService = (
     } = {}
   ) {
     const { startDate, endDate, ...rest } = options
-    return movementRepo.list({
+    return transactionRepo.list({
       ...rest,
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,

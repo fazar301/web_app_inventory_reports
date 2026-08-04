@@ -19,18 +19,15 @@ const productService = makeProductService(
 
 // ─── Zod Schemas ──────────────────────────────────────────────────────────────
 const newProductSchema = z.object({
-  sku: z.string().min(3).max(20, "SKU maks 20 karakter"),
   name: z.string().min(1, "Nama tidak boleh kosong").max(200),
   description: z.string().optional(),
   categoryId: z.string().min(1, "Category ID diperlukan"),
-  price: z.number().min(0, "Harga tidak boleh negatif"),
-  quantity: z.number().int().min(0).optional(),
   threshold: z.number().int().min(0).optional(),
   unit: z.string().optional(),
   imageUrl: z.string().url().optional().or(z.literal("")),
 })
 
-const updateProductSchema = newProductSchema.omit({ sku: true }).partial()
+const updateProductSchema = newProductSchema.partial()
 
 const listQuerySchema = z.object({
   categoryId: z.string().optional(),
@@ -38,7 +35,7 @@ const listQuerySchema = z.object({
   lowStock: z.coerce.boolean().optional(),
   page: z.coerce.number().int().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
-  sortBy: z.enum(["name", "price", "quantity", "createdAt"]).optional(),
+  sortBy: z.enum(["name", "createdAt"]).optional(),
   sortOrder: z.enum(["asc", "desc"]).optional(),
 })
 
