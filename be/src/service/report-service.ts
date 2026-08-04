@@ -20,7 +20,8 @@ export const makeReportService = (
 ) => ({
   async getInventorySummary() {
     const products = await productRepo.findAll()
-    return calculateInventorySummary(products)
+    const stockMap = await transactionRepo.getStockMap(products.map(p => p.id))
+    return calculateInventorySummary(products, stockMap)
   },
 
   async getTransactionReport(range: ReportDateRange = {}) {
@@ -33,7 +34,8 @@ export const makeReportService = (
 
   async getLowStockProducts() {
     const products = await productRepo.findAll()
-    return filterLowStockProducts(products)
+    const stockMap = await transactionRepo.getStockMap(products.map(p => p.id))
+    return filterLowStockProducts(products, stockMap)
   },
 
   async getTopProducts(limit: number = 10, range: ReportDateRange = {}) {
@@ -45,8 +47,9 @@ export const makeReportService = (
       productRepo.findAll(),
     ])
 
+    const stockMap = await transactionRepo.getStockMap(products.map(p => p.id))
     const reports = aggregateTransactionsByProduct(transactions)
-    return getTopOutProducts(reports, products, limit)
+    return getTopOutProducts(reports, products, stockMap, limit)
   },
 
   async getDetailedTransactions(
