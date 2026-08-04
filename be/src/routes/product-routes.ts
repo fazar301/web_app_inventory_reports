@@ -8,13 +8,15 @@ import { z } from "zod"
 import { makeProductService } from "../service/product-service"
 import { createPrismaProductRepo } from "../repository/product-repo"
 import { createPrismaCategoryRepo } from "../repository/category-repo"
-import { authMiddleware } from "../middleware/auth"
+import { createPrismaTransactionRepo } from "../repository/transaction-repo"
+import { authMiddleware, adminOnly } from "../middleware/auth"
 import { db } from "../lib/db"
 
 // ─── Dependency Injection ─────────────────────────────────────────────────────
 const productService = makeProductService(
   createPrismaProductRepo(db),
-  createPrismaCategoryRepo(db)
+  createPrismaCategoryRepo(db),
+  createPrismaTransactionRepo(db)
 )
 
 // ─── Zod Schemas ──────────────────────────────────────────────────────────────
@@ -33,7 +35,7 @@ const listQuerySchema = z.object({
   categoryId: z.string().optional(),
   search: z.string().optional(),
   page: z.coerce.number().int().min(1).optional(),
-  limit: z.coerce.number().int().min(1).max(100).optional(),
+  limit: z.coerce.number().int().min(1).max(10000).optional(),
   sortBy: z.enum(["name", "createdAt"]).optional(),
   sortOrder: z.enum(["asc", "desc"]).optional(),
 })
@@ -70,6 +72,7 @@ productRoutes.get("/:id", async (c) => {
  */
 productRoutes.post(
   "/",
+  adminOnly(),
   zValidator("json", newProductSchema),
   async (c) => {
     const body = c.req.valid("json")
@@ -84,6 +87,7 @@ productRoutes.post(
  */
 productRoutes.put(
   "/:id",
+  adminOnly(),
   zValidator("json", updateProductSchema),
   async (c) => {
     const id = c.req.param("id")
@@ -97,7 +101,7 @@ productRoutes.put(
  * DELETE /api/products/:id
  * Hapus produk
  */
-productRoutes.delete("/:id", async (c) => {
+productRoutes.delete("/:id", adminOnly(), async (c) => {
   const id = c.req.param("id")
   const result = await productService.deleteProduct(id)
   return c.json({ success: true, data: result })

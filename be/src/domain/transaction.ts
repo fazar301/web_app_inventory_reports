@@ -24,6 +24,8 @@ export type NewTransactionInput = {
   createdBy?: string
 }
 
+export type UpdateTransactionInput = Partial<NewTransactionInput>
+
 export const isValidQuantity = (qty: number): boolean => qty > 0 && Number.isInteger(qty)
 export const isValidAmount = (amt: number): boolean => amt >= 0
 

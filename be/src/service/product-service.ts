@@ -4,7 +4,8 @@
 
 import type { ProductRepo, ProductListOptions } from "../repository/product-repo"
 import type { CategoryRepo } from "../repository/category-repo"
-import type { NewProductInput, UpdateProductInput } from "../domain/product"
+import type { TransactionRepo } from "../repository/transaction-repo"
+import type { NewProductInput, UpdateProductInput, Product } from "../domain/product"
 import {
   validateNewProduct,
   normalizeNewProduct,
@@ -19,13 +20,28 @@ import {
 
 export const makeProductService = (
   productRepo: ProductRepo,
-  categoryRepo: CategoryRepo
+  categoryRepo: CategoryRepo,
+  transactionRepo: TransactionRepo
 ) => ({
   /**
    * Ambil daftar produk dengan filter & pagination
    */
   async listProducts(options?: ProductListOptions) {
-    return productRepo.list(options)
+    const result = await productRepo.list(options)
+    
+    // Fetch stock for these products
+    const productIds = result.data.map(p => p.id)
+    const stockMap = await transactionRepo.getStockMap(productIds)
+    
+    result.data = result.data.map(p => ({
+      ...p,
+      stock: stockMap[p.id] || 0
+    }))
+    
+    // Filter by low stock if needed (since it's dynamic, we might need to filter after fetching, but limit/page might be skewed)
+    // For MVP, if lowStock filter is needed we do it here (though not supported in options currently)
+    
+    return result
   },
 
   /**
@@ -34,6 +50,8 @@ export const makeProductService = (
   async getProduct(id: string) {
     const product = await productRepo.findById(id)
     if (!product) throw new NotFoundError("Produk", id)
+    
+    product.stock = await transactionRepo.getCurrentStock(id)
     return product
   },
 

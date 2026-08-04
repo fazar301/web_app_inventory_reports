@@ -5,7 +5,7 @@ import type {
   TransactionRepo,
   TransactionListOptions,
 } from "../repository/transaction-repo"
-import type { NewTransactionInput } from "../domain/transaction"
+import type { NewTransactionInput, UpdateTransactionInput } from "../domain/transaction"
 import { validateNewTransaction } from "../domain/transaction"
 import { ValidationError, NotFoundError } from "./errors"
 
@@ -47,6 +47,51 @@ export const makeTransactionService = (
     const product = await productRepo.findById(productId)
     if (!product) throw new NotFoundError("Produk", productId)
     return transactionRepo.listByProduct(productId)
+  },
+
+  async updateTransaction(id: string, input: UpdateTransactionInput) {
+    const transaction = await transactionRepo.findById(id)
+    if (!transaction) throw new NotFoundError("Transaksi", id)
+    
+    // Hitung perubahan stok
+    const currentStock = await transactionRepo.getCurrentStock(transaction.productId)
+    let simulatedStock = currentStock
+    
+    // 1. Batalkan efek transaksi lama
+    if (transaction.type === "IN") simulatedStock -= transaction.quantity
+    if (transaction.type === "OUT") simulatedStock += transaction.quantity
+    
+    // 2. Aplikasikan efek transaksi baru
+    const newType = input.type ?? transaction.type
+    const newQty = input.quantity ?? transaction.quantity
+    
+    if (newType === "IN") simulatedStock += newQty
+    if (newType === "OUT") simulatedStock -= newQty
+    
+    if (simulatedStock < 0) {
+      throw new ValidationError([
+        `Update ini akan menyebabkan stok menjadi minus (${simulatedStock}). Perubahan dibatalkan.`
+      ])
+    }
+
+    return transactionRepo.update(id, input)
+  },
+
+  async deleteTransaction(id: string) {
+    const transaction = await transactionRepo.findById(id)
+    if (!transaction) throw new NotFoundError("Transaksi", id)
+    
+    if (transaction.type === "IN") {
+      const currentStock = await transactionRepo.getCurrentStock(transaction.productId)
+      if (currentStock - transaction.quantity < 0) {
+        throw new ValidationError([
+          `Menghapus transaksi masuk ini akan menyebabkan stok menjadi minus (${currentStock - transaction.quantity}). Hapus transaksi keluar yang berkaitan terlebih dahulu.`
+        ])
+      }
+    }
+    
+    await transactionRepo.delete(id)
+    return { message: "Transaksi berhasil dihapus" }
   },
 })
 

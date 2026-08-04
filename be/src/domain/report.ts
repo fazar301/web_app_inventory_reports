@@ -5,7 +5,7 @@ import type { Transaction } from "./transaction"
 
 export type InventorySummary = {
   totalProducts: number
-  totalItems: number
+  totalCategories: number
   lowStockCount: number
   outOfStockCount: number
 }
@@ -27,10 +27,11 @@ export type TopProduct = {
 
 export const calculateInventorySummary = (
   products: Product[],
-  stockMap: Record<string, number>
+  stockMap: Record<string, number>,
+  totalCategories: number
 ): InventorySummary => ({
   totalProducts: products.length,
-  totalItems: products.reduce((sum, p) => sum + (stockMap[p.id] || 0), 0),
+  totalCategories,
   lowStockCount: products.filter((p) => {
     const stock = stockMap[p.id] || 0
     return stock > 0 && stock <= p.threshold
