@@ -95,5 +95,5 @@ export const filterLowStockProducts = (
 ): (Product & { stock: number })[] => {
   return products
     .map((p) => ({ ...p, stock: stockMap[p.id] || 0 }))
-    .filter((p) => p.stock <= p.threshold)
+    .filter((p) => p.stock > 0 && p.stock <= p.threshold)
 }

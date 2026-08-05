@@ -53,7 +53,29 @@ const toTransaction = (raw: any): Transaction => ({
 const toTransactionWithProduct = (raw: any): TransactionWithProduct => ({
   ...toTransaction(raw),
   productName: raw.product?.name ?? "",
+  createdBy: raw.user?.name ?? raw.createdBy ?? null,
 })
+
+const populateUsers = async (db: PrismaClient, raws: any[]) => {
+  const userIds = [...new Set(raws.map(r => r.createdBy).filter(Boolean))] as string[]
+  if (userIds.length === 0) return raws
+
+  const users = await db.user.findMany({
+    where: { id: { in: userIds } },
+    select: { id: true, name: true }
+  })
+  
+  const userMap = new Map(users.map(u => [u.id, u.name]))
+  
+  return raws.map(r => {
+    if (!r.createdBy) return r
+    const userName = userMap.get(r.createdBy)
+    return {
+      ...r,
+      user: { name: userName || r.createdBy }
+    }
+  })
+}
 
 export const createPrismaTransactionRepo = (db: PrismaClient): TransactionRepo => ({
   async create(input) {
@@ -92,8 +114,10 @@ export const createPrismaTransactionRepo = (db: PrismaClient): TransactionRepo =
       db.transaction.count({ where }),
     ])
 
+    const populated = await populateUsers(db, raws)
+
     return {
-      data: raws.map(toTransactionWithProduct),
+      data: populated.map(toTransactionWithProduct),
       total,
       page,
       limit,
@@ -107,7 +131,8 @@ export const createPrismaTransactionRepo = (db: PrismaClient): TransactionRepo =
       orderBy: [{ transactionDate: "desc" }, { createdAt: "desc" }],
       include: { product: { select: { name: true } } },
     })
-    return raws.map(toTransactionWithProduct)
+    const populated = await populateUsers(db, raws)
+    return populated.map(toTransactionWithProduct)
   },
 
   async listWithProduct(options = {}) {
@@ -124,7 +149,8 @@ export const createPrismaTransactionRepo = (db: PrismaClient): TransactionRepo =
       orderBy: [{ transactionDate: "desc" }, { createdAt: "desc" }],
       include: { product: { select: { name: true } } },
     })
-    return raws.map(toTransactionWithProduct)
+    const populated = await populateUsers(db, raws)
+    return populated.map(toTransactionWithProduct)
   },
 
   async getCurrentStock(productId) {
