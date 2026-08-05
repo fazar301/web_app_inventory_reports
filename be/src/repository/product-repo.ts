@@ -9,15 +9,13 @@ import type {
   UpdateProductInput,
 } from "../domain/product"
 
-// ─── Interface Kecil & Spesifik (ISP) ────────────────────────────────────────
 
 export interface ProductListOptions {
   categoryId?: string
   search?: string
-  lowStock?: boolean
   page?: number
   limit?: number
-  sortBy?: "name" | "price" | "quantity" | "createdAt"
+  sortBy?: "name" | "createdAt"
   sortOrder?: "asc" | "desc"
 }
 
@@ -31,7 +29,6 @@ export interface ProductListResult {
 
 export interface ProductReader {
   findById(id: string): Promise<Product | null>
-  findBySku(sku: string): Promise<Product | null>
   list(options?: ProductListOptions): Promise<ProductListResult>
   findAll(): Promise<Product[]>
 }
@@ -39,23 +36,19 @@ export interface ProductReader {
 export interface ProductWriter {
   create(input: NewProductInput): Promise<Product>
   update(id: string, input: UpdateProductInput): Promise<Product>
-  updateQuantity(id: string, quantity: number): Promise<Product>
   delete(id: string): Promise<void>
 }
 
-// Gabungan interface untuk dipakai service (DIP: service bergantung ini, bukan Prisma)
 export type ProductRepo = ProductReader & ProductWriter
 
 // ─── Implementasi Prisma (Concrete) ──────────────────────────────────────────
 
 const toProduct = (raw: any): Product => ({
   id: raw.id,
-  sku: raw.sku,
   name: raw.name,
   description: raw.description ?? null,
   categoryId: raw.categoryId,
-  price: raw.price,
-  quantity: raw.quantity,
+  categoryName: raw.category?.name,
   threshold: raw.threshold,
   unit: raw.unit,
   imageUrl: raw.imageUrl ?? null,
@@ -63,28 +56,22 @@ const toProduct = (raw: any): Product => ({
   updatedAt: raw.updatedAt.toISOString(),
 })
 
-/**
- * Factory function — Prisma disuntik dari luar (DIP)
- * Service tidak perlu tahu bahwa ini Prisma/MongoDB
- */
 export const createPrismaProductRepo = (db: PrismaClient): ProductRepo => ({
   async findById(id) {
-    const raw = await db.product.findUnique({ where: { id } })
-    return raw ? toProduct(raw) : null
-  },
-
-  async findBySku(sku) {
-    const raw = await db.product.findUnique({ where: { sku } })
-    return raw ? toProduct(raw) : null
+    const raw = await db.product.findUnique({
+      where: { id },
+      include: { category: true }
+    })
+    if (!raw) return null
+    return toProduct(raw)
   },
 
   async list(options = {}) {
     const {
       categoryId,
       search,
-      lowStock,
       page = 1,
-      limit = 20,
+      limit = 10,
       sortBy = "createdAt",
       sortOrder = "desc",
     } = options
@@ -94,12 +81,9 @@ export const createPrismaProductRepo = (db: PrismaClient): ProductRepo => ({
     if (search) {
       where.OR = [
         { name: { contains: search, mode: "insensitive" } },
-        { sku: { contains: search, mode: "insensitive" } },
         { description: { contains: search, mode: "insensitive" } },
       ]
     }
-    // Low stock: quantity <= threshold
-    // MongoDB Prisma doesn't support field comparisons directly, we filter post-query for lowStock
 
     const skip = (page - 1) * limit
     const [raws, total] = await Promise.all([
@@ -108,17 +92,13 @@ export const createPrismaProductRepo = (db: PrismaClient): ProductRepo => ({
         skip,
         take: limit,
         orderBy: { [sortBy]: sortOrder },
+        include: { category: true }
       }),
       db.product.count({ where }),
     ])
 
-    let data = raws.map(toProduct)
-    if (lowStock) {
-      data = data.filter((p) => p.quantity <= p.threshold)
-    }
-
     return {
-      data,
+      data: raws.map(toProduct),
       total,
       page,
       limit,
@@ -127,26 +107,32 @@ export const createPrismaProductRepo = (db: PrismaClient): ProductRepo => ({
   },
 
   async findAll() {
-    const raws = await db.product.findMany({ orderBy: { name: "asc" } })
+    const raws = await db.product.findMany({
+      orderBy: { name: "asc" },
+      include: { category: true }
+    })
     return raws.map(toProduct)
   },
 
   async create(input) {
-    const raw = await db.product.create({ data: input as any })
+    const raw = await db.product.create({
+      data: input as any,
+      include: { category: true }
+    })
     return toProduct(raw)
   },
 
   async update(id, input) {
-    const raw = await db.product.update({ where: { id }, data: input as any })
-    return toProduct(raw)
-  },
-
-  async updateQuantity(id, quantity) {
-    const raw = await db.product.update({ where: { id }, data: { quantity } })
+    const raw = await db.product.update({
+      where: { id },
+      data: input as any,
+      include: { category: true }
+    })
     return toProduct(raw)
   },
 
   async delete(id) {
+    await db.transaction.deleteMany({ where: { productId: id } })
     await db.product.delete({ where: { id } })
   },
 })

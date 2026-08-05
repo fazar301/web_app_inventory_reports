@@ -1,12 +1,11 @@
 // be/src/service/report-service.ts
-// Service layer: logika untuk membuat laporan
-// Orkestrasi: ambil data dari repo → kalkulasi (pure domain functions)
 
 import type { ProductRepo } from "../repository/product-repo"
-import type { StockMovementRepo } from "../repository/stock-movement-repo"
+import type { TransactionRepo } from "../repository/transaction-repo"
+import type { CategoryRepo } from "../repository/category-repo"
 import {
   calculateInventorySummary,
-  aggregateMovementsByProduct,
+  aggregateTransactionsByProduct,
   getTopOutProducts,
   filterLowStockProducts,
 } from "../domain/report"
@@ -18,55 +17,88 @@ export interface ReportDateRange {
 
 export const makeReportService = (
   productRepo: ProductRepo,
-  movementRepo: StockMovementRepo
+  transactionRepo: TransactionRepo,
+  categoryRepo: CategoryRepo
 ) => ({
-  /**
-   * Ringkasan inventori: total produk, item, nilai, low stock, out of stock
-   */
   async getInventorySummary() {
     const products = await productRepo.findAll()
-    return calculateInventorySummary(products) // pure function
+    const categories = await categoryRepo.list()
+    const stockMap = await transactionRepo.getStockMap(products.map(p => p.id))
+    return calculateInventorySummary(products, stockMap, categories.length)
   },
 
-  /**
-   * Laporan pergerakan stok (aggregasi per produk) dalam rentang tanggal
-   */
-  async getStockMovementReport(range: ReportDateRange = {}) {
-    const startDate = range.startDate ? new Date(range.startDate) : undefined
-    const endDate = range.endDate ? new Date(range.endDate) : undefined
+  async getInventoryReport(
+    options: ReportDateRange & {
+      categoryId?: string
+      search?: string
+      page?: number
+      limit?: number
+      sortBy?: "name" | "createdAt"
+      sortOrder?: "asc" | "desc"
+    } = {}
+  ) {
+    const { startDate, endDate, sortOrder = "desc", ...productOptions } = options
+    const productsResult = await productRepo.list(productOptions)
 
-    const movements = await movementRepo.listWithProduct({ startDate, endDate })
-    return aggregateMovementsByProduct(movements) // pure function
+    const start = startDate ? new Date(startDate) : undefined
+    const end = endDate ? new Date(endDate) : undefined
+
+    const productIds = productsResult.data.map((p) => p.id)
+    
+    const [stockMap, lastDateMap] = await Promise.all([
+      transactionRepo.getStockMap(productIds, undefined, undefined), // selalu ambil stok total tanpa terpengaruh filter tanggal
+      transactionRepo.getLastTransactionDateMap(productIds, start, end),
+    ])
+
+    let reportData = productsResult.data.map((p) => ({
+      productId: p.id,
+      productName: p.name,
+      categoryName: p.categoryName || "-",
+      stock: stockMap[p.id] || 0,
+      unit: p.unit,
+      lastUpdated: lastDateMap[p.id] ?? p.updatedAt,
+      threshold: p.threshold,
+    }))
+
+    // Jika filter tanggal diaktifkan, hanya tampilkan produk yang bergerak (punya transaksi) di rentang tersebut
+    if (start || end) {
+      reportData = reportData.filter((p) => lastDateMap[p.productId])
+    }
+
+    // Urutkan berdasarkan lastUpdated
+    reportData.sort((a, b) => {
+      const dateA = new Date(a.lastUpdated).getTime()
+      const dateB = new Date(b.lastUpdated).getTime()
+      return sortOrder === "asc" ? dateA - dateB : dateB - dateA
+    })
+
+    return {
+      ...productsResult,
+      data: reportData,
+    }
   },
 
-  /**
-   * Daftar produk dengan stok rendah (di bawah threshold)
-   */
   async getLowStockProducts() {
     const products = await productRepo.findAll()
-    return filterLowStockProducts(products) // pure function
+    const stockMap = await transactionRepo.getStockMap(products.map(p => p.id))
+    return filterLowStockProducts(products, stockMap)
   },
 
-  /**
-   * Top N produk paling sering keluar (terlaris)
-   */
   async getTopProducts(limit: number = 10, range: ReportDateRange = {}) {
     const startDate = range.startDate ? new Date(range.startDate) : undefined
     const endDate = range.endDate ? new Date(range.endDate) : undefined
 
-    const [movements, products] = await Promise.all([
-      movementRepo.listWithProduct({ startDate, endDate }),
+    const [transactions, products] = await Promise.all([
+      transactionRepo.listWithProduct({ startDate, endDate }),
       productRepo.findAll(),
     ])
 
-    const reports = aggregateMovementsByProduct(movements) // pure
-    return getTopOutProducts(reports, products, limit)      // pure
+    const stockMap = await transactionRepo.getStockMap(products.map(p => p.id))
+    const reports = aggregateTransactionsByProduct(transactions)
+    return getTopOutProducts(reports, products, stockMap, limit)
   },
 
-  /**
-   * Detail pergerakan stok (raw list) dengan pagination
-   */
-  async getDetailedMovements(
+  async getDetailedTransactions(
     options: ReportDateRange & {
       productId?: string
       type?: "IN" | "OUT"
@@ -75,10 +107,14 @@ export const makeReportService = (
     } = {}
   ) {
     const { startDate, endDate, ...rest } = options
-    return movementRepo.list({
+    
+    const start = startDate ? new Date(startDate) : undefined
+    const end = endDate ? new Date(endDate) : undefined
+
+    return transactionRepo.list({
       ...rest,
-      startDate: startDate ? new Date(startDate) : undefined,
-      endDate: endDate ? new Date(endDate) : undefined,
+      startDate: start,
+      endDate: end,
     })
   },
 })

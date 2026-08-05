@@ -8,7 +8,7 @@ import { logger } from "hono/logger"
 import { authRoutes } from "./routes/auth-routes"
 import { productRoutes } from "./routes/product-routes"
 import { categoryRoutes } from "./routes/category-routes"
-import { stockRoutes } from "./routes/stock-routes"
+import { transactionRoutes } from "./routes/transaction-routes"
 import { reportRoutes } from "./routes/report-routes"
 import { globalErrorHandler } from "./middleware/error-handler"
 
@@ -34,7 +34,7 @@ app.get("/health", (c) => c.json({ status: "healthy", timestamp: new Date().toIS
 app.route("/api/auth", authRoutes)
 app.route("/api/products", productRoutes)
 app.route("/api/categories", categoryRoutes)
-app.route("/api/stock-movements", stockRoutes)
+app.route("/api/transactions", transactionRoutes)
 app.route("/api/reports", reportRoutes)
 
 // ─── 404 Handler ──────────────────────────────────────────────────────────────

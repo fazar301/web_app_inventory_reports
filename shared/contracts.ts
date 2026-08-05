@@ -52,42 +52,36 @@ export type UpdateCategoryRequest = Partial<CreateCategoryRequest>
 
 // ─── Product ──────────────────────────────────────────────────────────────────
 
-export type ProductDTO = {
+export interface ProductDTO {
   id: string
-  sku: string
   name: string
-  description: string | null
+  description?: string
   categoryId: string
-  price: number
-  quantity: number
+  categoryName?: string
   threshold: number
   unit: string
-  imageUrl: string | null
+  imageUrl?: string
   createdAt: string
   updatedAt: string
 }
 
 export type CreateProductRequest = {
-  sku: string
   name: string
   description?: string
   categoryId: string
-  price: number
-  quantity?: number
   threshold?: number
   unit?: string
   imageUrl?: string
 }
 
-export type UpdateProductRequest = Partial<Omit<CreateProductRequest, "sku">>
+export type UpdateProductRequest = Partial<CreateProductRequest>
 
 export type ProductListQuery = {
   categoryId?: string
   search?: string
-  lowStock?: boolean
   page?: number
   limit?: number
-  sortBy?: "name" | "price" | "quantity" | "createdAt"
+  sortBy?: "name" | "createdAt"
   sortOrder?: "asc" | "desc"
 }
 
@@ -100,33 +94,34 @@ export type PaginatedResponse<T> = {
   totalPages: number
 }
 
-// ─── Stock Movement ───────────────────────────────────────────────────────────
+// ─── Transaction ───────────────────────────────────────────────────────────
 
-export type MovementType = "IN" | "OUT"
+export type TransactionType = "IN" | "OUT"
 
-export type StockMovementDTO = {
+export type TransactionDTO = {
   id: string
   productId: string
   productName: string
-  sku: string
-  type: MovementType
+  type: TransactionType
   quantity: number
-  note: string | null
-  reference: string | null
+  amount: number
+  transactionDate: string
+  notes: string | null
   createdBy: string | null
   createdAt: string
 }
 
-export type CreateStockMovementRequest = {
+export type CreateTransactionRequest = {
   productId: string
-  type: MovementType
+  type: TransactionType
   quantity: number
-  note?: string
-  reference?: string
+  amount: number
+  transactionDate: string
+  notes?: string
 }
 
-export type StockMovementResult = {
-  movement: StockMovementDTO
+export type TransactionResult = {
+  transaction: TransactionDTO
   product: ProductDTO
 }
 
@@ -134,25 +129,24 @@ export type StockMovementResult = {
 
 export type InventorySummaryDTO = {
   totalProducts: number
-  totalItems: number
-  totalValue: number
+  totalItems: number // Total seluruh sisa stok
   lowStockCount: number
   outOfStockCount: number
 }
 
-export type StockMovementReportDTO = {
+export type InventoryReportDTO = {
   productId: string
   productName: string
-  sku: string
-  totalIn: number
-  totalOut: number
-  netChange: number
+  categoryName: string
+  stock: number
+  unit: string
+  lastUpdated: string
+  threshold: number
 }
 
 export type TopProductDTO = {
   productId: string
   productName: string
-  sku: string
   totalOut: number
   currentStock: number
 }

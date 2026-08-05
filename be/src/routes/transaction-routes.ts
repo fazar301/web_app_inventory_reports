@@ -1,0 +1,94 @@
+// be/src/routes/transaction-routes.ts
+
+import { Hono } from "hono"
+import { zValidator } from "@hono/zod-validator"
+import { z } from "zod"
+import { makeTransactionService } from "../service/transaction-service"
+import { createPrismaTransactionRepo } from "../repository/transaction-repo"
+import { createPrismaProductRepo } from "../repository/product-repo"
+import { authMiddleware } from "../middleware/auth"
+import { db } from "../lib/db"
+
+const transactionService = makeTransactionService(
+  createPrismaProductRepo(db),
+  createPrismaTransactionRepo(db)
+)
+
+const newTransactionSchema = z.object({
+  productId: z.string().min(1, "Product ID diperlukan"),
+  type: z.enum(["IN", "OUT"]),
+  quantity: z.number().int().min(1, "Kuantitas minimal 1"),
+  amount: z.number().min(0, "Amount harus positif"),
+  transactionDate: z.string().datetime(),
+  notes: z.string().optional(),
+})
+
+const updateTransactionSchema = newTransactionSchema.partial()
+
+const listQuerySchema = z.object({
+  productId: z.string().optional(),
+  type: z.enum(["IN", "OUT"]).optional(),
+  search: z.string().optional(),
+  startDate: z.string().datetime().optional(),
+  endDate: z.string().datetime().optional(),
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100000).optional(),
+})
+
+type AuthVariables = {
+  userId: string
+  userRole: string
+}
+
+export const transactionRoutes = new Hono<{ Variables: AuthVariables }>()
+
+transactionRoutes.use("*", authMiddleware())
+
+transactionRoutes.post(
+  "/",
+  zValidator("json", newTransactionSchema),
+  async (c) => {
+    const body = c.req.valid("json")
+    const userId = c.get("userId")
+
+    const result = await transactionService.recordTransaction({
+      ...body,
+      createdBy: userId,
+    })
+
+    return c.json({ success: true, data: result }, 201)
+  }
+)
+
+transactionRoutes.get("/", zValidator("query", listQuerySchema), async (c) => {
+  const { startDate, endDate, ...rest } = c.req.valid("query")
+  const result = await transactionService.listTransactions({
+    ...rest,
+    startDate: startDate ? new Date(startDate) : undefined,
+    endDate: endDate ? new Date(endDate) : undefined,
+  })
+  return c.json({ success: true, ...result })
+})
+
+transactionRoutes.get("/product/:productId", async (c) => {
+  const productId = c.req.param("productId")
+  const result = await transactionService.getProductTransactions(productId)
+  return c.json({ success: true, data: result })
+})
+
+transactionRoutes.put(
+  "/:id",
+  zValidator("json", updateTransactionSchema),
+  async (c) => {
+    const id = c.req.param("id")
+    const body = c.req.valid("json")
+    const result = await transactionService.updateTransaction(id, body)
+    return c.json({ success: true, data: result })
+  }
+)
+
+transactionRoutes.delete("/:id", async (c) => {
+  const id = c.req.param("id")
+  const result = await transactionService.deleteTransaction(id)
+  return c.json({ success: true, ...result })
+})

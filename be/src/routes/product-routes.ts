@@ -8,37 +8,35 @@ import { z } from "zod"
 import { makeProductService } from "../service/product-service"
 import { createPrismaProductRepo } from "../repository/product-repo"
 import { createPrismaCategoryRepo } from "../repository/category-repo"
-import { authMiddleware } from "../middleware/auth"
+import { createPrismaTransactionRepo } from "../repository/transaction-repo"
+import { authMiddleware, adminOnly } from "../middleware/auth"
 import { db } from "../lib/db"
 
 // ─── Dependency Injection ─────────────────────────────────────────────────────
 const productService = makeProductService(
   createPrismaProductRepo(db),
-  createPrismaCategoryRepo(db)
+  createPrismaCategoryRepo(db),
+  createPrismaTransactionRepo(db)
 )
 
 // ─── Zod Schemas ──────────────────────────────────────────────────────────────
 const newProductSchema = z.object({
-  sku: z.string().min(3).max(20, "SKU maks 20 karakter"),
   name: z.string().min(1, "Nama tidak boleh kosong").max(200),
   description: z.string().optional(),
   categoryId: z.string().min(1, "Category ID diperlukan"),
-  price: z.number().min(0, "Harga tidak boleh negatif"),
-  quantity: z.number().int().min(0).optional(),
   threshold: z.number().int().min(0).optional(),
   unit: z.string().optional(),
   imageUrl: z.string().url().optional().or(z.literal("")),
 })
 
-const updateProductSchema = newProductSchema.omit({ sku: true }).partial()
+const updateProductSchema = newProductSchema.partial()
 
 const listQuerySchema = z.object({
   categoryId: z.string().optional(),
   search: z.string().optional(),
-  lowStock: z.coerce.boolean().optional(),
   page: z.coerce.number().int().min(1).optional(),
-  limit: z.coerce.number().int().min(1).max(100).optional(),
-  sortBy: z.enum(["name", "price", "quantity", "createdAt"]).optional(),
+  limit: z.coerce.number().int().min(1).max(10000).optional(),
+  sortBy: z.enum(["name", "createdAt"]).optional(),
   sortOrder: z.enum(["asc", "desc"]).optional(),
 })
 
@@ -74,6 +72,7 @@ productRoutes.get("/:id", async (c) => {
  */
 productRoutes.post(
   "/",
+  adminOnly(),
   zValidator("json", newProductSchema),
   async (c) => {
     const body = c.req.valid("json")
@@ -88,6 +87,7 @@ productRoutes.post(
  */
 productRoutes.put(
   "/:id",
+  adminOnly(),
   zValidator("json", updateProductSchema),
   async (c) => {
     const id = c.req.param("id")
@@ -101,7 +101,7 @@ productRoutes.put(
  * DELETE /api/products/:id
  * Hapus produk
  */
-productRoutes.delete("/:id", async (c) => {
+productRoutes.delete("/:id", adminOnly(), async (c) => {
   const id = c.req.param("id")
   const result = await productService.deleteProduct(id)
   return c.json({ success: true, data: result })
